@@ -1,6 +1,6 @@
-![Document Manager](.github/assets/banner-772x250.png)
+![Darkstar File Manager](.github/assets/banner-772x250.png)
 
-# Document Manager
+# Darkstar File Manager
 
 A WordPress plugin for securely exchanging documents between administrators and clients. Files are served through an authenticated download handler — clients can only access their own files. You choose where files are stored, and **we strongly recommend a directory outside the web root** so they cannot be accessed directly via URL under any circumstances.
 
@@ -10,7 +10,7 @@ A WordPress plugin for securely exchanging documents between administrators and 
 
 Most WordPress file plugins store uploads inside `wp-content/uploads/`. Any file in that directory has a direct URL — if someone guesses or obtains the link, they can download it without logging in.
 
-Document Manager lets you store files in **any directory you choose**. For maximum security we recommend a path outside your web root (e.g. `/var/www/client-docs` instead of `/var/www/html/wp-content/uploads`). Files stored there have no direct URL — they can only be served through the plugin's authenticated download handler, which verifies the user is logged in and owns the file before delivering it.
+Darkstar File Manager lets you store files in **any directory you choose**. For maximum security we recommend a path outside your web root (e.g. `/var/www/client-docs` instead of `/var/www/html/wp-content/uploads`). Files stored there have no direct URL — they can only be served through the plugin's authenticated download handler, which verifies the user is logged in and owns the file before delivering it.
 
 If you prefer, files can also be stored inside the web root (e.g. within `wp-content`). The authenticated handler still protects downloads, but a direct URL to the file would bypass that protection — so outside the web root is always the safer choice.
 
@@ -22,7 +22,7 @@ If you prefer, files can also be stored inside the web root (e.g. within `wp-con
 - **Two-way file sharing** — admins upload files for clients, clients upload files back
 - **Strict user isolation** — each client can only access their own files
 - **Separate file sections** — clients see "Documents for you" (from admin) and "Your Uploaded Documents" separately
-- **Simple shortcode** — add `[cdm_client_login]` to any page
+- **Simple shortcode** — add `[dsfm_client_login]` to any page
 - **File type and MIME validation** — configurable allowed types
 - **ZIP bomb protection** — uncompressed content size limit enforced
 - **Upload rate limiting** — 20 uploads per user per hour
@@ -63,11 +63,11 @@ If you prefer, files can also be stored inside the web root (e.g. within `wp-con
 1. Download the plugin zip from [Releases](https://github.com/justinblayney/Document-Manager/releases)
 2. In WordPress admin go to **Plugins → Add New → Upload Plugin**
 3. Upload the zip and click **Install Now**, then **Activate**
-4. Go to **Settings → Document Manager**
+4. Go to **Settings → Darkstar File Manager**
 5. Set the upload folder path to a directory **outside your web root**
    - e.g. `/var/www/client-docs` (not `/var/www/html/...`)
    - The path detection helper on the settings page will suggest one
-6. Create a page and add the shortcode `[cdm_client_login]`
+6. Create a page and add the shortcode `[dsfm_client_login]`
 7. Publish the page and share the URL with your clients
 
 ---
@@ -79,7 +79,7 @@ If you prefer, files can also be stored inside the web root (e.g. within `wp-con
 Place on any WordPress page:
 
 ```
-[cdm_client_login]
+[dsfm_client_login]
 ```
 
 - Shows a login form to unauthenticated visitors
@@ -117,7 +117,7 @@ Once logged in, clients visit the page with the shortcode and see:
 
 ## Configuration
 
-All settings are at **Settings → Document Manager**:
+All settings are at **Settings → Darkstar File Manager**:
 
 | Setting | Default | Notes |
 |---|---|---|
