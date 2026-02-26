@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall Document Manager
+ * Uninstall Darkstar File Manager
  *
  * Runs when the plugin is deleted from WP Admin → Plugins.
  * Removes all plugin options and cleans up transients.
@@ -10,9 +10,9 @@
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
 // Remove plugin settings
-delete_option('cdm_upload_root');
-delete_option('cdm_max_file_size');
-delete_option('cdm_allowed_types');
+delete_option('dsfm_upload_root');
+delete_option('dsfm_max_file_size');
+delete_option('dsfm_allowed_types');
 
 // Remove rate-limit transients (they expire on their own, but clean up immediately)
 // No WP API alternative exists for wildcard transient deletion by key pattern.
@@ -20,7 +20,7 @@ delete_option('cdm_allowed_types');
 global $wpdb;
 $wpdb->query(
     "DELETE FROM {$wpdb->options}
-     WHERE option_name LIKE '_transient_cdm_uploads_%'
-        OR option_name LIKE '_transient_timeout_cdm_uploads_%'"
+     WHERE option_name LIKE '_transient_dsfm_uploads_%'
+        OR option_name LIKE '_transient_timeout_dsfm_uploads_%'"
 );
 // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching

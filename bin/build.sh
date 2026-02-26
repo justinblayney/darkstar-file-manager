@@ -1,12 +1,12 @@
 #!/bin/bash
-# Build a clean WordPress.org submission zip for Client Document Manager.
+# Build a clean WordPress.org submission zip for Darkstar File Manager.
 # Usage: ./bin/build.sh
-# Output: dist/document-manager-<version>.zip
+# Output: dist/darkstar-file-manager-<version>.zip
 
 set -e
 
-PLUGIN_SLUG="document-manager"
-PLUGIN_FILE="document-manager.php"
+PLUGIN_SLUG="darkstar-file-manager"
+PLUGIN_FILE="darkstar-file-manager.php"
 DIST_DIR="$(cd "$(dirname "$0")/.." && pwd)/dist"
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
