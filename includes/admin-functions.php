@@ -1,6 +1,19 @@
 <?php
 defined('ABSPATH') || exit;
 
+add_action('admin_enqueue_scripts', function ($hook_suffix) {
+    if ('admin_page_dsfm-view-user-docs' !== $hook_suffix) {
+        return;
+    }
+    wp_enqueue_script(
+        'dsfm-admin',
+        plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js',
+        [],
+        '1.0.0',
+        true
+    );
+});
+
 // Add "View Documents" link to user row actions for admins
 add_filter('user_row_actions', 'dsfm_add_user_docs_link', 10, 2);
 function dsfm_add_user_docs_link($actions, $user)
@@ -17,16 +30,21 @@ function dsfm_add_user_docs_link($actions, $user)
 }
 
 
-// Adds page but does not display a menu item
+// Register under users.php so WordPress can always resolve the page title.
 add_action('admin_menu', function () {
     add_submenu_page(
-        null, // No parent slug, so it won't appear in any menu
-        __('Client Documents', 'darkstar-file-manager'),
-        __('Client Documents', 'darkstar-file-manager'),
+        'users.php',
+        __('User Documents', 'darkstar-file-manager'),
+        __('User Documents', 'darkstar-file-manager'),
         'manage_options',
         'dsfm-view-user-docs',
         'dsfm_render_user_docs_page'
     );
+});
+
+// Hide the menu item via CSS — keeps the page registered for title resolution.
+add_action('admin_head', function () {
+    echo '<style>#adminmenu a[href="users.php?page=dsfm-view-user-docs"] { display: none !important; }</style>';
 });
 
 
@@ -94,17 +112,22 @@ function dsfm_render_user_docs_page()
     }
 
     // Handle admin file upload
-    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES array validated via dsfm_validate_upload() which checks type, size, and MIME
     if (isset($_POST['dsfm_admin_upload']) && isset($_FILES['dsfm_admin_file']) && isset($_POST['dsfm_admin_upload_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dsfm_admin_upload_nonce'])), 'dsfm_admin_upload_file')) {
-        if (!empty($_FILES['dsfm_admin_file']['name']) && isset($_FILES['dsfm_admin_file']['tmp_name'])) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES validated via dsfm_validate_upload()
+        if (!empty($_FILES['dsfm_admin_file']['name']) && isset($_FILES['dsfm_admin_file']['tmp_name'])) {
             $rate_key     = 'dsfm_uploads_' . get_current_user_id() . '_' . floor(time() / 3600);
             $upload_count = (int) get_transient($rate_key);
             if ($upload_count >= DSFM_MAX_UPLOADS_PER_HOUR) {
                 echo '<div class="error"><p>' . esc_html(__('Upload rate limit exceeded. Please wait before uploading more files.', 'darkstar-file-manager')) . '</p></div>';
             } else {
-                // Validate file
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES validated via dsfm_validate_upload() which checks type, size, and MIME
-                $validation = dsfm_validate_upload($_FILES['dsfm_admin_file']);
+                // Sanitize user-supplied file name and validate
+                $file_input = [
+                    'name'     => sanitize_file_name( wp_unslash( $_FILES['dsfm_admin_file']['name'] ) ),
+                    'type'     => isset( $_FILES['dsfm_admin_file']['type'] ) ? sanitize_mime_type( wp_unslash( $_FILES['dsfm_admin_file']['type'] ) ) : '',
+                    'tmp_name' => $_FILES['dsfm_admin_file']['tmp_name'], // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- server-generated temp path
+                    'error'    => isset( $_FILES['dsfm_admin_file']['error'] ) ? (int) $_FILES['dsfm_admin_file']['error'] : UPLOAD_ERR_NO_FILE,
+                    'size'     => isset( $_FILES['dsfm_admin_file']['size'] ) ? (int) $_FILES['dsfm_admin_file']['size'] : 0,
+                ];
+                $validation = dsfm_validate_upload( $file_input );
                 if (!$validation['valid']) {
                     echo '<div class="error"><p>' . esc_html($validation['error']) . '</p></div>';
                 } else {
@@ -113,24 +136,39 @@ function dsfm_render_user_docs_page()
                         dsfm_protect_upload_dir(DSFM_UPLOAD_ROOT);
                     }
 
-                    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- filename sanitized via basename() on same line
-                    $filename  = basename($_FILES['dsfm_admin_file']['name']);
-                    $timestamp = time();
-                    $safe_name = $timestamp . "-" . $filename;
-                    $target    = $user_dir . "/" . $safe_name;
+                    $timestamp              = time();
+                    $dsfm_admin_dir_filter  = function ( $dirs ) use ( $user_dir ) {
+                        $dirs['path']   = $user_dir;
+                        $dirs['url']    = '';
+                        $dirs['subdir'] = '';
+                        return $dirs;
+                    };
+                    add_filter( 'upload_dir', $dsfm_admin_dir_filter );
 
-                    // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- move_uploaded_file required for custom path outside web root; tmp_name is a server-generated path, not user input
-                    if (move_uploaded_file($_FILES['dsfm_admin_file']['tmp_name'], $target)) {
-                        set_transient($rate_key, $upload_count + 1, HOUR_IN_SECONDS);
-                        $metadata             = file_exists($meta_file) ? json_decode(file_get_contents($meta_file), true) : [];
+                    $uploaded = wp_handle_upload(
+                        $file_input,
+                        [
+                            'test_form'                => false,
+                            'unique_filename_callback' => function ( $dir, $name, $ext ) use ( $timestamp ) {
+                                $base = pathinfo( $name, PATHINFO_FILENAME );
+                                return $timestamp . '-' . $base . $ext;
+                            },
+                        ]
+                    );
+                    remove_filter( 'upload_dir', $dsfm_admin_dir_filter );
+
+                    if ( isset( $uploaded['error'] ) ) {
+                        echo '<div class="error"><p>' . esc_html( $uploaded['error'] ) . '</p></div>';
+                    } else {
+                        $safe_name            = basename( $uploaded['file'] );
+                        set_transient( $rate_key, $upload_count + 1, HOUR_IN_SECONDS );
+                        $metadata             = file_exists( $meta_file ) ? json_decode( file_get_contents( $meta_file ), true ) : [];
                         $metadata[$safe_name] = [
                             'timestamp'   => $timestamp,
                             'uploaded_by' => 'admin',
                         ];
-                        file_put_contents($meta_file, json_encode($metadata));
-                        echo '<div class="updated"><p>' . esc_html(__('File uploaded successfully.', 'darkstar-file-manager')) . '</p></div>';
-                    } else {
-                        echo '<div class="error"><p>' . esc_html(__('Error uploading file. Please check folder permissions.', 'darkstar-file-manager')) . '</p></div>';
+                        file_put_contents( $meta_file, json_encode( $metadata ) );
+                        echo '<div class="updated"><p>' . esc_html( __( 'File uploaded successfully.', 'darkstar-file-manager' ) ) . '</p></div>';
                     }
                 }
             }
@@ -192,16 +230,6 @@ function dsfm_render_user_docs_page()
     }
 
     echo '</tbody></table></form>';
-
-    // Add JavaScript for "Select All" functionality
-    echo '<script>
-    document.getElementById("dsfm_select_all").addEventListener("change", function() {
-        var checkboxes = document.querySelectorAll(".dsfm_file_checkbox");
-        checkboxes.forEach(function(checkbox) {
-            checkbox.checked = this.checked;
-        }, this);
-    });
-    </script>';
 
     echo '</div>';
 }

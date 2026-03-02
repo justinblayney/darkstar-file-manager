@@ -33,15 +33,11 @@ function dsfm_render_settings_page()
         echo '<div class="updated"><p>' . esc_html(__('Settings saved.', 'darkstar-file-manager')) . '</p></div>';
     }
 
-    $current_path = get_option('dsfm_upload_root', dirname(ABSPATH) . '/client-docs');
-    $max_file_size = get_option('dsfm_max_file_size', 50);
-    $allowed_types = get_option('dsfm_allowed_types', 'pdf,doc,docx,xls,xlsx,csv,txt,jpg,jpeg,png,gif,webp,zip');
-
-    // Path detection helper
-    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-    $doc_root       = isset($_SERVER['DOCUMENT_ROOT']) ? sanitize_text_field(wp_unslash($_SERVER['DOCUMENT_ROOT'])) : '';
-    $parent_dir     = $doc_root ? dirname($doc_root) : '';
-    $suggested_path = $parent_dir ? $parent_dir . '/client-docs' : '';
+    $upload_dir     = wp_upload_dir();
+    $suggested_path = $upload_dir['basedir'] . '/darkstar-file-manager';
+    $current_path   = get_option('dsfm_upload_root', $suggested_path);
+    $max_file_size  = get_option('dsfm_max_file_size', 50);
+    $allowed_types  = get_option('dsfm_allowed_types', 'pdf,doc,docx,xls,xlsx,csv,txt,jpg,jpeg,png,gif,webp,zip');
     $path_exists    = file_exists($current_path);
     // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- no WP equivalent for UI path status check
     $path_writable  = $path_exists && is_writable($current_path);
@@ -72,8 +68,7 @@ function dsfm_render_settings_page()
                         <div style="margin-top: 10px; padding: 10px; background: #f0f0f1; border-left: 4px solid #2271b1;">
                             <strong><?php echo esc_html(__('Path Detection Helper:', 'darkstar-file-manager')); ?></strong><br>
                             <span style="font-size: 12px;">
-                                <?php echo esc_html(__('Web root:', 'darkstar-file-manager')); ?> <code><?php echo esc_html($doc_root); ?></code><br>
-                                <?php echo esc_html(__('Suggested path (outside web root):', 'darkstar-file-manager')); ?> <code><?php echo esc_html($suggested_path); ?></code>
+                                <?php echo esc_html(__('Suggested path:', 'darkstar-file-manager')); ?> <code><?php echo esc_html($suggested_path); ?></code>
                                 <button type="button" class="button button-small" onclick="document.getElementById('dsfm_upload_root').value='<?php echo esc_js($suggested_path); ?>'"><?php echo esc_html(__('Use This Path', 'darkstar-file-manager')); ?></button>
                                 <br>
                                 <?php echo esc_html(__('Current path status:', 'darkstar-file-manager')); ?>

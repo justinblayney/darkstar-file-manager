@@ -74,7 +74,7 @@ add_shortcode('dsfm_client_login', function () {
     }
 
     // Handle file upload
-    if (isset($_SERVER['REQUEST_METHOD']) && 'POST' === $_SERVER['REQUEST_METHOD'] && !empty($_FILES['dsfm_file']['name']) && isset($_FILES['dsfm_file']['tmp_name'])) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES validated via dsfm_validate_upload()
+    if (isset($_SERVER['REQUEST_METHOD']) && 'POST' === $_SERVER['REQUEST_METHOD'] && !empty($_FILES['dsfm_file']['name']) && isset($_FILES['dsfm_file']['tmp_name'])) {
         if (!isset($_POST['dsfm_upload_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dsfm_upload_nonce'])), 'dsfm_upload_file')) {
             $message = "<p class='dsfm-error'>" . esc_html(__('Security check failed. Please try again.', 'darkstar-file-manager')) . "</p>";
         } else {
@@ -83,29 +83,54 @@ add_shortcode('dsfm_client_login', function () {
             if ($upload_count >= DSFM_MAX_UPLOADS_PER_HOUR) {
                 $message = "<p class='dsfm-error'>" . esc_html(__('Upload rate limit exceeded. Please wait before uploading more files.', 'darkstar-file-manager')) . "</p>";
             } else {
-                // Validate file
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- $_FILES validated via dsfm_validate_upload() which checks type, size, and MIME
-                $validation = dsfm_validate_upload($_FILES['dsfm_file']);
+                // Sanitize user-supplied file name and validate
+                $file_input = [
+                    'name'     => sanitize_file_name( wp_unslash( $_FILES['dsfm_file']['name'] ) ),
+                    'type'     => isset( $_FILES['dsfm_file']['type'] ) ? sanitize_mime_type( wp_unslash( $_FILES['dsfm_file']['type'] ) ) : '',
+                    'tmp_name' => $_FILES['dsfm_file']['tmp_name'], // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- server-generated temp path
+                    'error'    => isset( $_FILES['dsfm_file']['error'] ) ? (int) $_FILES['dsfm_file']['error'] : UPLOAD_ERR_NO_FILE,
+                    'size'     => isset( $_FILES['dsfm_file']['size'] ) ? (int) $_FILES['dsfm_file']['size'] : 0,
+                ];
+                $validation = dsfm_validate_upload( $file_input );
                 if (!$validation['valid']) {
                     $message = "<p class='dsfm-error'>" . esc_html($validation['error']) . "</p>";
                 } else {
-                    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- filename sanitized via basename() on same line
-                    $filename  = basename($_FILES['dsfm_file']['name']);
-                    $timestamp = time();
-                    $safe_name = $timestamp . "-" . $filename;
-                    $target    = $user_dir . "/" . $safe_name;
+                    $timestamp             = time();
+                    if ( ! function_exists( 'wp_handle_upload' ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/file.php';
+                    }
 
-                    // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- move_uploaded_file required for custom path outside web root; tmp_name is a server-generated path, not user input
-                    if (move_uploaded_file($_FILES['dsfm_file']['tmp_name'], $target)) {
-                        set_transient($rate_key, $upload_count + 1, HOUR_IN_SECONDS);
+                    $dsfm_client_dir_filter = function ( $dirs ) use ( $user_dir ) {
+                        $dirs['path']   = $user_dir;
+                        $dirs['url']    = '';
+                        $dirs['subdir'] = '';
+                        return $dirs;
+                    };
+                    add_filter( 'upload_dir', $dsfm_client_dir_filter );
+
+                    $uploaded = wp_handle_upload(
+                        $file_input,
+                        [
+                            'test_form'                => false,
+                            'unique_filename_callback' => function ( $dir, $name, $ext ) use ( $timestamp ) {
+                                $base = pathinfo( $name, PATHINFO_FILENAME );
+                                return $timestamp . '-' . $base . $ext;
+                            },
+                        ]
+                    );
+                    remove_filter( 'upload_dir', $dsfm_client_dir_filter );
+
+                    if ( isset( $uploaded['error'] ) ) {
+                        $message = "<p class='dsfm-error'>" . esc_html( $uploaded['error'] ) . "</p>";
+                    } else {
+                        $safe_name            = basename( $uploaded['file'] );
+                        set_transient( $rate_key, $upload_count + 1, HOUR_IN_SECONDS );
                         $metadata[$safe_name] = [
                             'timestamp'   => $timestamp,
-                            'uploaded_by' => 'client',
+                            'uploaded_by' => 'user',
                         ];
-                        file_put_contents($meta_file, json_encode($metadata));
-                        $message = "<p class='dsfm-success'>" . esc_html(__('File uploaded successfully.', 'darkstar-file-manager')) . "</p>";
-                    } else {
-                        $message = "<p class='dsfm-error'>" . esc_html(__('Error uploading file. Please check folder permissions.', 'darkstar-file-manager')) . "</p>";
+                        file_put_contents( $meta_file, json_encode( $metadata ) );
+                        $message = "<p class='dsfm-success'>" . esc_html( __( 'File uploaded successfully.', 'darkstar-file-manager' ) ) . "</p>";
                     }
                 }
             }
@@ -164,7 +189,11 @@ add_shortcode('dsfm_client_login', function () {
                 <?php foreach ($admin_files as $file_info):
                     $file = $file_info['file'];
                     $timestamp = $file_info['timestamp'];
-                    $url = add_query_arg(['dsfm_download' => $file], home_url());
+                    $url = wp_nonce_url(
+                        add_query_arg(['dsfm_download' => $file], home_url()),
+                        'dsfm_download_' . $file,
+                        'dsfm_download_nonce'
+                    );
                     $display_name = preg_replace('/^\d+-/', '', $file);
                 ?>
                     <div style="text-align:left;"><a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html($display_name); ?></a></div>
@@ -190,7 +219,11 @@ add_shortcode('dsfm_client_login', function () {
         <?php foreach ($client_files as $file_info):
             $file = $file_info['file'];
             $timestamp = $file_info['timestamp'];
-            $url = add_query_arg(['dsfm_download' => $file], home_url());
+            $url = wp_nonce_url(
+                add_query_arg(['dsfm_download' => $file], home_url()),
+                'dsfm_download_' . $file,
+                'dsfm_download_nonce'
+            );
             $display_name = preg_replace('/^\d+-/', '', $file);
         ?>
             <div style="text-align:left;"><a href="<?php echo esc_url($url); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html($display_name); ?></a></div>
@@ -214,15 +247,19 @@ add_shortcode('dsfm_client_login', function () {
  * Handle file downloads for logged-in clients
  */
 add_action('init', function () {
-    if (!is_user_logged_in() || empty($_GET['dsfm_download'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- download links are nonce-free by design; access controlled by is_user_logged_in() and path ownership check below
+    if (!is_user_logged_in() || empty($_GET['dsfm_download'])) {
         return;
+    }
+
+    $filename = basename(sanitize_file_name(wp_unslash($_GET['dsfm_download'])));
+
+    if (!isset($_GET['dsfm_download_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['dsfm_download_nonce'])), 'dsfm_download_' . $filename)) {
+        wp_die(esc_html__('Security check failed.', 'darkstar-file-manager'));
     }
 
     $user = wp_get_current_user();
     $username = sanitize_file_name($user->user_login);
     $user_dir = trailingslashit(DSFM_UPLOAD_ROOT) . $username;
-    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.NonceVerification.Recommended -- download links are nonce-free by design; access is gated by is_user_logged_in() and path ownership check
-    $filename = basename(sanitize_file_name(wp_unslash($_GET['dsfm_download'])));
     $file_path = $user_dir . '/' . $filename;
 
     // Security check: ensure file exists and belongs to this user

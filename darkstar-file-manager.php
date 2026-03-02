@@ -22,7 +22,8 @@ defined('ABSPATH') || exit;
 register_activation_hook(__FILE__, 'dsfm_activate');
 function dsfm_activate()
 {
-    $upload_root = get_option('dsfm_upload_root', dirname(ABSPATH) . '/client-docs');
+    $upload_dir  = wp_upload_dir();
+    $upload_root = get_option('dsfm_upload_root', $upload_dir['basedir'] . '/darkstar-file-manager');
     if (!file_exists($upload_root)) {
         wp_mkdir_p($upload_root);
     }
@@ -109,7 +110,8 @@ function dsfm_register_polylang_strings()
 }
 
 if (!defined('DSFM_UPLOAD_ROOT')) {
-    define('DSFM_UPLOAD_ROOT', get_option('dsfm_upload_root', dirname(ABSPATH) . '/client-docs'));
+    $dsfm_upload_dir = wp_upload_dir();
+    define('DSFM_UPLOAD_ROOT', get_option('dsfm_upload_root', $dsfm_upload_dir['basedir'] . '/darkstar-file-manager'));
 }
 
 if (!defined('DSFM_MAX_UPLOADS_PER_HOUR')) {

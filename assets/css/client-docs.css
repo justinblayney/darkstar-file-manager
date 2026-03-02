@@ -90,6 +90,16 @@
     background-color: #481600;
 }
 
+.dsfm-success {
+    color: #00a32a;
+    font-weight: bold;
+}
+
+.dsfm-error {
+    color: #d63638;
+    font-weight: bold;
+}
+
 /* Custom login message (for iThemes Security compatibility) */
 .cdm-login-message {
     padding: 20px;
