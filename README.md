@@ -127,6 +127,12 @@ All settings are at **Settings → Darkstar File Manager**:
 
 ---
 
+## Disclaimer
+
+This plugin is provided **as-is, without warranty of any kind**. Use it at your own risk. While reasonable care has been taken to implement security best practices, no software is guaranteed to be free of vulnerabilities. You are responsible for your own server configuration, keeping WordPress and plugins up to date, and verifying that your setup meets your security requirements. The authors accept no liability for data loss, unauthorized access, or any other damages arising from use of this plugin.
+
+---
+
 ## License
 
 GPLv2 or later — see [LICENSE](LICENSE)
