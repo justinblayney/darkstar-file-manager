@@ -4,7 +4,7 @@
  * Plugin Name: Darkstar File Manager
  * Plugin URI: https://github.com/justinblayney/darkstar-file-manager
  * Description: Secure file management system allowing administrators to share files with users and users to upload their own documents.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Darkstar Media
  * Author URI: https://www.darkstarmedia.net
  * License: GPLv2 or later
@@ -28,6 +28,84 @@ function dsfm_activate()
         wp_mkdir_p($upload_root);
     }
     dsfm_protect_upload_dir($upload_root);
+
+    // Record activation date for the rating nudge (only on first activation)
+    if (!get_option('dsfm_activation_date')) {
+        add_option('dsfm_activation_date', time());
+    }
+}
+
+/**
+ * Handle "rate / later / no thanks" actions from the rating notice.
+ */
+add_action('admin_init', 'dsfm_handle_rating_action');
+function dsfm_handle_rating_action()
+{
+    if (empty($_GET['dsfm_rate_action']) || empty($_GET['dsfm_rate_nonce'])) {
+        return;
+    }
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    if (!wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['dsfm_rate_nonce'])), 'dsfm_rate_action')) {
+        return;
+    }
+
+    $action = sanitize_text_field(wp_unslash($_GET['dsfm_rate_action']));
+    if ('dismiss' === $action) {
+        update_option('dsfm_rating_dismissed', true);
+    } elseif ('later' === $action) {
+        set_transient('dsfm_rating_later', true, 14 * DAY_IN_SECONDS);
+    }
+
+    wp_safe_redirect(remove_query_arg(['dsfm_rate_action', 'dsfm_rate_nonce']));
+    exit;
+}
+
+/**
+ * Show a rating nudge notice after 7 days of use.
+ */
+add_action('admin_notices', 'dsfm_rating_notice');
+function dsfm_rating_notice()
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    if (get_option('dsfm_rating_dismissed')) {
+        return;
+    }
+    if (get_transient('dsfm_rating_later')) {
+        return;
+    }
+
+    $activation_date = get_option('dsfm_activation_date');
+    if (!$activation_date || (time() - $activation_date) < 7 * DAY_IN_SECONDS) {
+        return;
+    }
+
+    $nonce       = wp_create_nonce('dsfm_rate_action');
+    $rate_url    = 'https://wordpress.org/support/plugin/darkstar-file-manager/reviews/#new-post';
+    $later_url   = add_query_arg(['dsfm_rate_action' => 'later',   'dsfm_rate_nonce' => $nonce]);
+    $dismiss_url = add_query_arg(['dsfm_rate_action' => 'dismiss', 'dsfm_rate_nonce' => $nonce]);
+
+    ?>
+    <div class="notice notice-info" style="display:flex;align-items:center;gap:16px;padding:12px 16px;">
+        <span style="font-size:28px;line-height:1;">&#9733;</span>
+        <div>
+            <p style="margin:0 0 6px;">
+                <strong><?php echo esc_html__('Enjoying Darkstar File Manager?', 'darkstar-file-manager'); ?></strong>
+                <?php echo esc_html__("You've been using it for a week — a quick review on WordPress.org helps others find it and means a lot to us.", 'darkstar-file-manager'); ?>
+            </p>
+            <p style="margin:0;">
+                <a href="<?php echo esc_url($rate_url); ?>" target="_blank" rel="noopener noreferrer" class="button button-primary" style="margin-right:8px;">
+                    <?php echo esc_html__('Sure, I\'ll rate it!', 'darkstar-file-manager'); ?>
+                </a>
+                <a href="<?php echo esc_url($later_url); ?>" style="margin-right:8px;"><?php echo esc_html__('Maybe later', 'darkstar-file-manager'); ?></a>
+                <a href="<?php echo esc_url($dismiss_url); ?>" style="color:#999;"><?php echo esc_html__('No thanks', 'darkstar-file-manager'); ?></a>
+            </p>
+        </div>
+    </div>
+    <?php
 }
 
 // Register privacy policy content shown in WP Admin → Privacy Policy guide
@@ -192,22 +270,28 @@ function dsfm_validate_upload($file)
     $mime_type = finfo_file($finfo, $file['tmp_name']);
     finfo_close($finfo);
 
-    // Common safe MIME types
-    $allowed_mimes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'text/plain',
-        'text/csv',
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'application/zip',
-        'application/x-zip-compressed',
+    // Build allowed MIME types dynamically from configured extensions and WordPress's MIME map.
+    // This ensures admin-added extensions (e.g. mp4) are accepted without plugin updates.
+    $wp_mimes     = wp_get_mime_types();
+    $allowed_mimes = [];
+    foreach ( $allowed_types_array as $ext ) {
+        foreach ( $wp_mimes as $ext_pattern => $mime ) {
+            if ( in_array( $ext, explode( '|', $ext_pattern ), true ) ) {
+                $allowed_mimes[] = $mime;
+            }
+        }
+    }
+    // Include common MIME aliases not always present in wp_get_mime_types.
+    $mime_aliases = [
+        'zip' => [ 'application/x-zip-compressed', 'application/x-zip' ],
+        'csv' => [ 'text/plain' ],
     ];
+    foreach ( $mime_aliases as $alias_ext => $aliases ) {
+        if ( in_array( $alias_ext, $allowed_types_array, true ) ) {
+            $allowed_mimes = array_merge( $allowed_mimes, $aliases );
+        }
+    }
+    $allowed_mimes = array_unique( $allowed_mimes );
 
     if (!in_array($mime_type, $allowed_mimes)) {
         /* translators: %s is the detected MIME type of the uploaded file */

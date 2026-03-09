@@ -64,7 +64,7 @@ add_shortcode('dsfm_client_login', function () {
                 wp_delete_file($file_path);
                 if (isset($metadata[$file_to_delete])) {
                     unset($metadata[$file_to_delete]);
-                    file_put_contents($meta_file, json_encode($metadata));
+                    file_put_contents($meta_file, json_encode($metadata), LOCK_EX);
                 }
                 $message = "<p class='dsfm-success'>" . esc_html(__('File deleted successfully.', 'darkstar-file-manager')) . "</p>";
             } else {
@@ -129,7 +129,7 @@ add_shortcode('dsfm_client_login', function () {
                             'timestamp'   => $timestamp,
                             'uploaded_by' => 'user',
                         ];
-                        file_put_contents( $meta_file, json_encode( $metadata ) );
+                        file_put_contents( $meta_file, json_encode( $metadata ), LOCK_EX );
                         $message = "<p class='dsfm-success'>" . esc_html( __( 'File uploaded successfully.', 'darkstar-file-manager' ) ) . "</p>";
                     }
                 }
@@ -272,7 +272,7 @@ add_action('init', function () {
 
         header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $display_name . '"');
+        header('Content-Disposition: attachment; filename="' . str_replace( [ '"', "\r", "\n" ], '', $display_name ) . '"');
         header('Content-Length: ' . filesize($real_path));
         header('Cache-Control: must-revalidate');
         header('Pragma: public');

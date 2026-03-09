@@ -13,6 +13,9 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 delete_option('dsfm_upload_root');
 delete_option('dsfm_max_file_size');
 delete_option('dsfm_allowed_types');
+delete_option('dsfm_activation_date');
+delete_option('dsfm_rating_dismissed');
+delete_transient('dsfm_rating_later');
 
 // Remove rate-limit transients (they expire on their own, but clean up immediately)
 // No WP API alternative exists for wildcard transient deletion by key pattern.

@@ -73,14 +73,13 @@ function dsfm_render_user_docs_page()
     // Handle individual file deletion
     if (isset($_POST['dsfm_admin_delete_file']) && isset($_POST['dsfm_admin_delete_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dsfm_admin_delete_nonce'])), 'dsfm_admin_delete_file')) {
         $file_to_delete = basename(sanitize_file_name(wp_unslash($_POST['dsfm_admin_delete_file'])));
-        $file_path = $user_dir . '/' . $file_to_delete;
-
-        if (file_exists($file_path)) {
-            wp_delete_file($file_path);
+        $resolved_path = realpath($user_dir . '/' . $file_to_delete);
+        if ($resolved_path && strpos($resolved_path, $user_dir) === 0 && file_exists($resolved_path)) {
+            wp_delete_file($resolved_path);
             $metadata = file_exists($meta_file) ? json_decode(file_get_contents($meta_file), true) : [];
             if (isset($metadata[$file_to_delete])) {
                 unset($metadata[$file_to_delete]);
-                file_put_contents($meta_file, json_encode($metadata));
+                file_put_contents($meta_file, json_encode($metadata), LOCK_EX);
             }
             echo '<div class="updated"><p>' . esc_html(__('File deleted successfully.', 'darkstar-file-manager')) . '</p></div>';
         }
@@ -93,10 +92,10 @@ function dsfm_render_user_docs_page()
 
         foreach (array_map('sanitize_file_name', wp_unslash($_POST['dsfm_files'])) as $file) {
             $file = basename($file);
-            $file_path = $user_dir . '/' . $file;
+            $resolved_path = realpath($user_dir . '/' . $file);
 
-            if (file_exists($file_path)) {
-                wp_delete_file($file_path);
+            if ($resolved_path && strpos($resolved_path, $user_dir) === 0 && file_exists($resolved_path)) {
+                wp_delete_file($resolved_path);
                 if (isset($metadata[$file])) {
                     unset($metadata[$file]);
                 }
@@ -105,7 +104,7 @@ function dsfm_render_user_docs_page()
         }
 
         if ($deleted_count > 0) {
-            file_put_contents($meta_file, json_encode($metadata));
+            file_put_contents($meta_file, json_encode($metadata), LOCK_EX);
             /* translators: %d is the number of files deleted */
             echo '<div class="updated"><p>' . esc_html(sprintf(__('%d file(s) deleted successfully.', 'darkstar-file-manager'), $deleted_count)) . '</p></div>';
         }
@@ -167,7 +166,7 @@ function dsfm_render_user_docs_page()
                             'timestamp'   => $timestamp,
                             'uploaded_by' => 'admin',
                         ];
-                        file_put_contents( $meta_file, json_encode( $metadata ) );
+                        file_put_contents( $meta_file, json_encode( $metadata ), LOCK_EX );
                         echo '<div class="updated"><p>' . esc_html( __( 'File uploaded successfully.', 'darkstar-file-manager' ) ) . '</p></div>';
                     }
                 }
@@ -257,7 +256,7 @@ add_action('admin_init', function () {
     if (file_exists($file)) {
         header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Disposition: attachment; filename="' . str_replace( [ '"', "\r", "\n" ], '', $filename ) . '"');
         header('Content-Length: ' . filesize($file));
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- streaming large files; WP_Filesystem::get_contents() loads entire file into memory
         readfile($file);

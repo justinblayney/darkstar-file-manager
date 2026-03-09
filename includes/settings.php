@@ -41,9 +41,21 @@ function dsfm_render_settings_page()
     $path_exists    = file_exists($current_path);
     // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- no WP equivalent for UI path status check
     $path_writable  = $path_exists && is_writable($current_path);
+
+    // Detect whether the upload path appears to be inside the web root.
+    // .htaccess protection only works on Apache; Nginx ignores it silently.
+    $doc_root          = isset( $_SERVER['DOCUMENT_ROOT'] ) ? rtrim( sanitize_text_field( wp_unslash( $_SERVER['DOCUMENT_ROOT'] ) ), '/' ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- used only for path comparison, not output
+    $is_in_web_root    = $doc_root && ( strpos( rtrim( $current_path, '/' ), $doc_root ) === 0 );
 ?>
     <div class="wrap">
         <h1><?php echo esc_html(__('Darkstar File Manager Settings', 'darkstar-file-manager')); ?></h1>
+
+        <?php if ( $is_in_web_root ) : ?>
+        <div class="notice notice-warning" style="margin: 20px 0;">
+            <p><strong><?php echo esc_html( __( 'Security Warning: Upload path is inside the web root.', 'darkstar-file-manager' ) ); ?></strong><br>
+            <?php echo esc_html( __( 'Your upload folder appears to be inside your web root, which means files could be accessed directly via URL on Nginx servers (Apache\'s .htaccess protection does not apply to Nginx). It is strongly recommended to move the upload folder to a path outside your web root — for example, one directory above your public_html or html folder.', 'darkstar-file-manager' ) ); ?></p>
+        </div>
+        <?php endif; ?>
 
         <div class="notice notice-info" style="margin: 20px 0;">
             <h2><?php echo esc_html(__('How to Use This Plugin', 'darkstar-file-manager')); ?></h2>
